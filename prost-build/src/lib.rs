@@ -187,6 +187,7 @@ pub struct Config {
     strip_enum_prefix: bool,
     out_dir: Option<PathBuf>,
     extern_paths: Vec<(String, String)>,
+    files_callback: Option<Box<dyn FnOnce(&[FileDescriptorProto])>>,
 }
 
 impl Config {
@@ -581,6 +582,10 @@ impl Config {
         let extern_paths = ExternPaths::new(&self.extern_paths, self.prost_types)
             .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
 
+        if let Some(cb) = self.files_callback.take() {
+            cb(&files);
+        }
+
         for file in files {
             let module = self.module(&file);
 
@@ -603,6 +608,11 @@ impl Config {
         Ok(modules)
     }
 
+    pub fn files_callback(&mut self, callback: impl FnOnce(&[FileDescriptorProto]) + 'static) -> &mut Self {
+        self.files_callback = Some(Box::new(callback));
+        self
+    }
+
     fn module(&self, file: &FileDescriptorProto) -> Module {
         file.package()
             .split('.')
@@ -623,6 +633,7 @@ impl default::Default for Config {
             strip_enum_prefix: true,
             out_dir: None,
             extern_paths: Vec::new(),
+            files_callback: None,
         }
     }
 }
