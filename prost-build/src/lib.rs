@@ -500,7 +500,11 @@ impl Config {
     ///                                &["src"]).unwrap();
     /// }
     /// ```
-    pub fn compile_protos<P>(&mut self, protos: &[P], includes: &[P]) -> Result<()>
+    pub fn compile_protos<P>(
+        &mut self,
+        protos: &[P],
+        includes: &[P],
+    ) -> Result<Vec<FileDescriptorProto>>
     where
         P: AsRef<Path>,
     {
@@ -549,6 +553,7 @@ impl Config {
 
         let buf = fs::read(descriptor_set)?;
         let descriptor_set = FileDescriptorSet::decode(&*buf)?;
+        let files = descriptor_set.file.clone();
 
         let modules = self.generate(descriptor_set.file)?;
         for (module, content) in modules {
@@ -570,7 +575,7 @@ impl Config {
             }
         }
 
-        Ok(())
+        Ok(files)
     }
 
     fn generate(&mut self, files: Vec<FileDescriptorProto>) -> Result<HashMap<Module, String>> {
@@ -581,10 +586,6 @@ impl Config {
             .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
         let extern_paths = ExternPaths::new(&self.extern_paths, self.prost_types)
             .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
-
-        if let Some(cb) = self.files_callback.take() {
-            cb(&files);
-        }
 
         for file in files {
             let module = self.module(&file);
@@ -608,7 +609,10 @@ impl Config {
         Ok(modules)
     }
 
-    pub fn files_callback(&mut self, callback: impl FnOnce(&[FileDescriptorProto]) + 'static) -> &mut Self {
+    pub fn files_callback(
+        &mut self,
+        callback: impl FnOnce(&[FileDescriptorProto]) + 'static,
+    ) -> &mut Self {
         self.files_callback = Some(Box::new(callback));
         self
     }
@@ -683,7 +687,7 @@ pub fn compile_protos<P>(protos: &[P], includes: &[P]) -> Result<()>
 where
     P: AsRef<Path>,
 {
-    Config::new().compile_protos(protos, includes)
+    Config::new().compile_protos(protos, includes).map(|_| ())
 }
 
 /// Returns the path to the `protoc` binary.
