@@ -114,10 +114,11 @@ use std::collections::HashMap;
 use std::default;
 use std::env;
 use std::fs;
-use std::io::{Error, ErrorKind, Result};
+use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use anyhow::{Context, Result};
 use log::trace;
 use prost::Message;
 use prost_types::{FileDescriptorProto, FileDescriptorSet};
@@ -508,13 +509,13 @@ impl Config {
     where
         P: AsRef<Path>,
     {
-        let target: PathBuf = self.out_dir.clone().map(Ok).unwrap_or_else(|| {
+        let target: PathBuf = if let Some(dir) = &self.out_dir {
+            dir.clone()
+        } else {
             env::var_os("OUT_DIR")
-                .ok_or_else(|| {
-                    Error::new(ErrorKind::Other, "OUT_DIR environment variable is not set")
-                })
-                .map(Into::into)
-        })?;
+                .context("OUT_DIR environment variable is not set")?
+                .into()
+        };
 
         // TODO: This should probably emit 'rerun-if-changed=PATH' directives for cargo, however
         // according to [1] if any are output then those paths replace the default crate root,
@@ -522,7 +523,10 @@ impl Config {
         // this figured out.
         // [1]: http://doc.crates.io/build-script.html#outputs-of-the-build-script
 
-        let tmp = tempfile::Builder::new().prefix("prost-build").tempdir()?;
+        let tmp = tempfile::Builder::new()
+            .prefix("prost-build")
+            .tempdir()
+            .context("cannot create temporary directory")?;
         let descriptor_set = tmp.path().join("prost-descriptor-set");
 
         let mut cmd = Command::new(protoc());
@@ -543,16 +547,18 @@ impl Config {
             cmd.arg(proto.as_ref());
         }
 
-        let output = cmd.output()?;
+        let output = cmd
+            .output()
+            .with_context(|| format!("could not run `{:?}`", cmd))?;
         if !output.status.success() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("protoc failed: {}", String::from_utf8_lossy(&output.stderr)),
-            ));
+            anyhow::bail!("protoc failed: {}", String::from_utf8_lossy(&output.stderr));
         }
 
-        let buf = fs::read(descriptor_set)?;
-        let descriptor_set = FileDescriptorSet::decode(&*buf)?;
+        let buf = fs::read(&descriptor_set).with_context(|| {
+            format!("cannot read descriptor_set `{}`", descriptor_set.display())
+        })?;
+        let descriptor_set = FileDescriptorSet::decode(&*buf)
+            .with_context(|| format!("cannot decode buffer for `{}`", descriptor_set.display()))?;
         let files = descriptor_set.file.clone();
 
         let modules = self.generate(descriptor_set.file)?;
@@ -571,7 +577,8 @@ impl Config {
                 trace!("unchanged: {:?}", filename);
             } else {
                 trace!("writing: {:?}", filename);
-                fs::write(output_path, content)?;
+                fs::write(&output_path, content)
+                    .with_context(|| format!("cannot write to `{}`", output_path.display()))?;
             }
         }
 

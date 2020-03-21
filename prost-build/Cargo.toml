@@ -19,6 +19,7 @@ petgraph = { version = "0.5", default-features = false }
 prost = { version = "0.6.1", path = ".." }
 prost-types = { version = "0.6.1", path = "../prost-types" }
 tempfile = "3"
+anyhow = "1.0.27"
 
 [build-dependencies]
 which = { version = "3", default-features = false }
