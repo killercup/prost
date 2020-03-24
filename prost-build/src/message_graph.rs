@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use petgraph::algo::has_path_connecting;
 use petgraph::graph::NodeIndex;
@@ -10,14 +10,14 @@ use prost_types::{field_descriptor_proto, DescriptorProto, FileDescriptorProto};
 /// The goal is to recognize when message types are recursively nested, so
 /// that fields can be boxed when necessary.
 pub struct MessageGraph {
-    index: HashMap<String, NodeIndex>,
+    index: BTreeMap<String, NodeIndex>,
     graph: Graph<String, ()>,
 }
 
 impl MessageGraph {
     pub fn new(files: &[FileDescriptorProto]) -> Result<MessageGraph, String> {
         let mut msg_graph = MessageGraph {
-            index: HashMap::new(),
+            index: BTreeMap::new(),
             graph: Graph::new(),
         };
 

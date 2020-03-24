@@ -110,7 +110,7 @@ mod extern_paths;
 mod ident;
 mod message_graph;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::default;
 use std::env;
 use std::fs;
@@ -585,14 +585,21 @@ impl Config {
         Ok(files)
     }
 
-    fn generate(&mut self, files: Vec<FileDescriptorProto>) -> Result<HashMap<Module, String>> {
-        let mut modules = HashMap::new();
-        let mut packages = HashMap::new();
+    fn generate(&mut self, files: Vec<FileDescriptorProto>) -> Result<BTreeMap<Module, String>> {
+        let mut modules = BTreeMap::new();
+        let mut packages = BTreeMap::new();
 
         let message_graph = MessageGraph::new(&files)
             .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
         let extern_paths = ExternPaths::new(&self.extern_paths, self.prost_types)
             .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
+
+        let mut files = files;
+        files.sort_by(|a, b| {
+            a.name()
+                .partial_cmp(b.name())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         for file in files {
             let module = self.module(&file);

@@ -1,6 +1,6 @@
 use std::ascii;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::iter;
 
 use itertools::{Either, Itertools};
@@ -82,7 +82,14 @@ impl<'a> CodeGenerator<'a> {
         );
 
         code_gen.path.push(4);
-        for (idx, message) in file.message_type.into_iter().enumerate() {
+        let mut messages: Vec<_> = file.message_type.into_iter().enumerate().collect();
+        messages.sort_by(|(_, a), (_, b)| {
+            a.name()
+                .partial_cmp(b.name())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        for (idx, message) in messages {
             code_gen.path.push(idx as i32);
             code_gen.append_message(message);
             code_gen.path.pop();
@@ -90,7 +97,15 @@ impl<'a> CodeGenerator<'a> {
         code_gen.path.pop();
 
         code_gen.path.push(5);
-        for (idx, desc) in file.enum_type.into_iter().enumerate() {
+
+        let mut enums: Vec<_> = file.enum_type.into_iter().enumerate().collect();
+        enums.sort_by(|(_, a), (_, b)| {
+            a.name()
+                .partial_cmp(b.name())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        for (idx, desc) in enums {
             code_gen.path.push(idx as i32);
             code_gen.append_enum(desc);
             code_gen.path.pop();
@@ -133,8 +148,8 @@ impl<'a> CodeGenerator<'a> {
         // of the map field entry types. The path index of the nested message types is preserved so
         // that comments can be retrieved.
         type NestedTypes = Vec<(DescriptorProto, usize)>;
-        type MapTypes = HashMap<String, (FieldDescriptorProto, FieldDescriptorProto)>;
-        let (nested_types, map_types): (NestedTypes, MapTypes) = message
+        type MapTypes = BTreeMap<String, (FieldDescriptorProto, FieldDescriptorProto)>;
+        let (mut nested_types, map_types): (NestedTypes, MapTypes) = message
             .nested_type
             .into_iter()
             .enumerate()
@@ -156,6 +171,12 @@ impl<'a> CodeGenerator<'a> {
                     Either::Left((nested_type, idx))
                 }
             });
+
+        nested_types.sort_by(|(a, _), (b, _)| {
+            a.name()
+                .partial_cmp(b.name())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Split the fields into a vector of the normal fields, and oneof fields.
         // Path indexes are preserved so that comments can be retrieved.
